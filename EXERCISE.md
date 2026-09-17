@@ -12,10 +12,12 @@ About 60 minutes. Parts A to C and F are the core; D and E are optional.
 | E | Optional: batch job and UI | 5 min |
 | F | Clean up | 5 min |
 
-> **Status of this document.** Parts A and E were executed locally while building this repo. The cloud
-> commands in parts B, C, D and F were checked against the current gcloud and GitHub Actions
-> documentation, but **not executed**: no cloud resources were created for this repo. If a
-> command fails for you, read the error, check `gcloud <command> --help`, and tell us.
+> **Status of this document.** Part A and the local commands of part E were executed while
+> building this repo. Parts B and C were executed on 17.09.2026 against Cloud Run in
+> `europe-west6`, and the notes in those parts describe what was seen. Parts D and F, and
+> writing predictions to `gs://` (part E), were checked against the current gcloud and GitHub
+> Actions documentation but **not executed**. If a command fails for you, read the error,
+> check `gcloud <command> --help`, and tell us.
 
 All commands assume a bash or zsh shell in the repository root. On Windows use WSL or Cloud Shell.
 
@@ -132,10 +134,17 @@ curl -s $URL/health | jq
 curl -s -X POST $URL/predict -H 'Content-Type: application/json' -d '{"hours_ahead": 6}' | jq
 ```
 
-6. Find your prediction in the logs (Console → Cloud Run → lucerne-temp → Logs), or:
+   The URL looks different from the one `gcloud run deploy` printed
+   (`https://lucerne-temp-<project-number>.$REGION.run.app`): a service has both addresses and
+   both work. This exercise uses the one from `services describe` throughout.
+
+6. Find your prediction in the logs: Console → Cloud Run → lucerne-temp → Logs, or the command
+   below. Cloud Run parsed the JSON line from stdout, so the fields arrive as `jsonPayload`
+   and you can filter on them. (`gcloud run services logs read` does not show these lines.)
 
 ```bash
-gcloud run services logs read lucerne-temp --region $REGION --limit 20
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="lucerne-temp" AND jsonPayload.event="prediction"' \
+  --limit 5 --freshness 1h --format 'value(jsonPayload)'
 ```
 
 ## C · Promote v8, canary, roll back
@@ -165,7 +174,7 @@ gcloud run deploy lucerne-temp --image $IMAGE:v8 --region $REGION --no-traffic -
 ```
 
 4. Smoke test the candidate on its own URL. Users still get v7. The tag URL is the service URL
-   with `candidate---` in front; the deploy output prints it as well.
+   from `services describe` (part B5) with `candidate---` in front.
 
 ```bash
 export CANDIDATE_URL="https://candidate---${URL#https://}"
@@ -186,6 +195,9 @@ for i in $(seq 30); do curl -s $URL/health | jq -r .model_version; done | sort |
 gcloud run services update-traffic lucerne-temp --region $REGION --to-latest
 curl -s $URL/health | jq .model_version                # "8"
 ```
+
+   The output shows `candidate (Deleting)` next to the tag URL. Ignore it: the tag is still
+   there afterwards, as `gcloud run services describe lucerne-temp --region $REGION` shows.
 
 7. Roll back. List the revisions, then send all traffic to the previous one. No rebuild.
 
