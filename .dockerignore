@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.env
+artifacts
+predictions
+tests
+ui
+docs
+**/__pycache__
+.ruff_cache
+.pytest_cache
+EXERCISE.md
+gha-creds-*.json

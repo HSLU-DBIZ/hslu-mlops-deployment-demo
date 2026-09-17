@@ -1,0 +1,35 @@
+name: predict
+
+# Scheduled batch inference: the next 24 hourly forecasts, every hour.
+#
+# GitHub schedule caveats:
+#   - cron is UTC unless you add a `timezone:` key next to `cron:`
+#   - runs can be delayed under load, most at the start of an hour: hence minute 5
+#   - scheduled workflows run on the default branch only
+#   - public repos: schedules are disabled after 60 days without repository activity
+#   - in a fork, scheduled workflows are off until you enable them in the Actions tab
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: uv sync --locked --no-dev
+      # No model binary in git: the first call trains the champion from the snapshot (seconds).
+      - run: uv run python -m lucerne_temp.inference.batch
+      # The runner's disk is gone after the job. Here the file is kept as a workflow artifact;
+      # in your project write to a bucket or table instead (PREDICTIONS_URI=gs://..., see README).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: predictions
+          path: predictions/latest.csv
+          retention-days: 7

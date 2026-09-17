@@ -1,0 +1,75 @@
+name: deploy
+
+# Tests -> build -> deploy a candidate revision without traffic -> smoke test -> shift traffic.
+#
+# Repository variables (Settings -> Secrets and variables -> Actions -> Variables), none secret:
+#   GCP_PROJECT_ID  your project ID
+#   WIF_PROVIDER    projects/<number>/locations/global/workloadIdentityPools/github/providers/<name>
+#   DEPLOY_SA       deployer@<project>.iam.gserviceaccount.com
+# One-time setup of all three: EXERCISE.md part D.
+# The Cloud Run service must exist already (EXERCISE.md part B): gcloud rejects
+# --no-traffic when it would create a new service.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # keyless auth (Workload Identity Federation)
+
+env:
+  REGION: europe-west6
+  SERVICE: lucerne-temp
+  IMAGE: europe-west6-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/ml/lucerne-temp
+
+jobs:
+  deploy:
+    if: vars.WIF_PROVIDER != '' # a fresh fork has no variables yet: skip instead of fail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.1.0
+      - name: 1 · tests
+        run: |
+          uv sync --locked
+          uv run ruff check
+          uv run pytest -q
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: 2+3 · build and push
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE:${{ github.sha }}" .
+          docker push "$IMAGE:${{ github.sha }}"
+
+      - name: 4 · deploy, no traffic yet
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.IMAGE }}:${{ github.sha }}
+          tag: candidate
+          no_traffic: true
+
+      - name: 5 · smoke test the candidate
+        run: |
+          EXPECTED=$(uv run python scripts/champion_version.py)
+          # with a tag set, the deploy step's url output is the tag URL
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors \
+            "${{ steps.deploy.outputs.url }}/health" \
+            | tee /dev/stderr \
+            | jq -e --arg v "$EXPECTED" '.model_version == $v'
+
+      - name: 6 · shift traffic
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --region "$REGION" --to-latest
