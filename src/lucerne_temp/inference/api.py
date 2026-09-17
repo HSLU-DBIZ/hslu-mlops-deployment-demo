@@ -46,7 +46,7 @@ def predict(req: ForecastRequest) -> Forecast:
         "model_version": state["version"],
         "feature_time": ft.isoformat(),
         "feature_source": source,
-        "features": X.iloc[0].round(3).to_dict(),
+        "features": X[state["model"].features].iloc[0].round(3).to_dict(),  # what the model saw
         "hours_ahead": req.hours_ahead,
         "temperature_c": y,
         "latency_ms": round((time.perf_counter() - start) * 1000, 1),

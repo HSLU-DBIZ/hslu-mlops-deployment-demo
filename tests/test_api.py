@@ -64,6 +64,19 @@ def test_every_prediction_is_logged_as_one_json_line(client, capsys):
             "temperature_c", "latency_ms"} <= set(log)  # fmt: skip
 
 
+@pytest.mark.parametrize("version, logs_daily_feature", [("7", False), ("8", True)])
+def test_log_holds_exactly_the_features_the_loaded_model_uses(
+    store, capsys, version, logs_daily_feature
+):
+    store.set_alias("champion", version)
+    with TestClient(app) as client:
+        client.post("/predict", json={"hours_ahead": 2})
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    log = next(line for line in lines if line["event"] == "prediction")
+    assert list(log["features"]) == store.load(version).features
+    assert ("same_hour_yesterday" in log["features"]) is logs_daily_feature
+
+
 def test_service_follows_the_alias(store):
     store.set_alias("champion", "8")
     with TestClient(app) as client:
