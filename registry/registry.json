@@ -1,0 +1,94 @@
+{
+  "name": "temp-forecaster",
+  "aliases": {
+    "champion": "7"
+  },
+  "versions": {
+    "7": {
+      "description": "short lags and hour of day",
+      "feature_set": "base",
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.05,
+        "max_depth": 4
+      },
+      "train_window": [
+        "2026-07-09 05:00:00+00:00",
+        "2026-09-03 12:00:00+00:00"
+      ],
+      "test_window": [
+        "2026-09-03 13:00:00+00:00",
+        "2026-09-17 12:00:00+00:00"
+      ],
+      "metrics": {
+        "mae": 2.315,
+        "mae_persistence": 4.263,
+        "mae_by_horizon": {
+          "1": {
+            "model": 1.101,
+            "persistence": 0.868
+          },
+          "3": {
+            "model": 1.325,
+            "persistence": 2.334
+          },
+          "6": {
+            "model": 1.948,
+            "persistence": 4.205
+          },
+          "12": {
+            "model": 2.629,
+            "persistence": 5.948
+          },
+          "24": {
+            "model": 2.657,
+            "persistence": 2.784
+          }
+        }
+      }
+    },
+    "8": {
+      "description": "v7 plus the temperature 24 h before the valid time",
+      "feature_set": "daily",
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.05,
+        "max_depth": 4
+      },
+      "train_window": [
+        "2026-07-09 05:00:00+00:00",
+        "2026-09-03 12:00:00+00:00"
+      ],
+      "test_window": [
+        "2026-09-03 13:00:00+00:00",
+        "2026-09-17 12:00:00+00:00"
+      ],
+      "metrics": {
+        "mae": 2.192,
+        "mae_persistence": 4.263,
+        "mae_by_horizon": {
+          "1": {
+            "model": 1.311,
+            "persistence": 0.868
+          },
+          "3": {
+            "model": 1.476,
+            "persistence": 2.334
+          },
+          "6": {
+            "model": 1.91,
+            "persistence": 4.205
+          },
+          "12": {
+            "model": 2.319,
+            "persistence": 5.948
+          },
+          "24": {
+            "model": 2.637,
+            "persistence": 2.784
+          }
+        }
+      }
+    }
+  }
+}
