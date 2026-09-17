@@ -174,7 +174,8 @@ gcloud run deploy lucerne-temp --image $IMAGE:v8 --region $REGION --no-traffic -
 ```
 
 4. Smoke test the candidate on its own URL. Users still get v7. The tag URL is the service URL
-   from `services describe` (part B5) with `candidate---` in front.
+   from `services describe` (part B5) with `candidate---` in front. The deploy output in step 3
+   prints it too: "The revision can be reached directly at https://candidate---…".
 
 ```bash
 export CANDIDATE_URL="https://candidate---${URL#https://}"
