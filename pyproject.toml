@@ -1,0 +1,34 @@
+[project]
+name = "lucerne-temp"
+version = "0.1.0"
+description = "Hourly temperature forecast for Lucerne: the running example of the HSLU MLOps lecture on deployment and serving"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "joblib>=1.4",
+    "pandas>=2.2",
+    "pydantic>=2.7",
+    "scikit-learn>=1.5",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+ui = ["streamlit>=1.38"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "scripts", "ui"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
