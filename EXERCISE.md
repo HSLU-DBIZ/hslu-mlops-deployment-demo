@@ -87,7 +87,9 @@ curl -s localhost:8080/health | jq
 
 ## B · Deploy to Cloud Run
 
-1. Set the project and the region, enable the two APIs.
+1. Set the project and the region, enable the two APIs. Use **your own** project ID: every
+   command below reads `$PROJECT_ID` and `$REGION` (`europe-west6`, Zurich), and no project is
+   hard-coded anywhere in this repo. In a new terminal, run the `export` lines again.
 
 ```bash
 export PROJECT_ID=<your-project-id>
