@@ -187,7 +187,7 @@ curl -s $URL/health | jq .model_version                # "7"
 
 ```bash
 gcloud run services update-traffic lucerne-temp --region $REGION --to-tags candidate=10
-for i in $(seq 30); do curl -s $URL/health | jq -r .model_version; done | sort | uniq -c
+for i in $(seq 40); do curl -s $URL/health | jq -r .model_version; done | sort | uniq -c
 ```
 
 6. All good: everything to the newest revision.

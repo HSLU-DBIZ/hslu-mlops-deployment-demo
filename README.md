@@ -220,10 +220,20 @@ No secrets are needed. Environment variables, see `.env.example`:
 
 `deploy.yml` is skipped until the three repository variables exist (EXERCISE.md part D).
 
+## For the lecturer
+
+[DEMO.md](DEMO.md) is the run sheet for demonstrating this live in the lecture: what to prepare
+before class and with which timings, eight numbered live steps (contract, prediction log,
+promotion gate, candidate revision, traffic split, rollback) with the expected output next to
+each, fallbacks for when the network or the build fails, and what to do afterwards. The same
+steps are also a script: `./demo/demo.sh --dry-run all` rehearses them without touching the
+cloud, and `./demo/demo.sh health|predict|logs|gate|candidate|canary|rollback|status` runs them
+one at a time, echoing each command before it executes.
+
 ## Repository layout
 
 ```
-├── README.md, EXERCISE.md, LICENSE
+├── README.md, EXERCISE.md (students), DEMO.md + demo/demo.sh (lecturer), LICENSE
 ├── docs/architecture.svg
 ├── src/lucerne_temp/
 │   ├── features/     ingest.py (live call, snapshot, fallback) · build.py (build_features) · backfill.py
