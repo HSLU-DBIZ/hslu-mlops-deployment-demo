@@ -84,6 +84,8 @@ step_prepare() { # before class: build, push, deploy v1
     run "git checkout registry/registry.json"
     say "deploy v1 and warm the container"
     run "gcloud run deploy $SERVICE --image $IMAGE:v1 --region $REGION --allow-unauthenticated"
+    say "after an earlier rollback the traffic is pinned to an old revision: unpin it"
+    run "gcloud run services update-traffic $SERVICE --region $REGION --to-latest"
     resolve_url
     run "curl -s $URL/health | $(JQ .)"
 }
