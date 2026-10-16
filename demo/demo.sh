@@ -127,6 +127,10 @@ step_candidate() { # 4+5 · a revision nobody sees yet
 step_canary() { # 6 · 10 % of the traffic
     resolve_url
     run "gcloud run services update-traffic $SERVICE --region $REGION --to-tags candidate=10"
+    # The new split can take a few seconds to reach every front end; counting at once can
+    # show 40 × "7" even at 10 %.
+    say "give the new split a moment to arrive"
+    run "sleep ${CANARY_WAIT:-10}"
     say "40 requests, counted by model version"
     run "for i in \$(seq 40); do curl -s $URL/health | $(JQ -r\ .model_version); done \
 | sort | uniq -c"
@@ -138,11 +142,13 @@ step_rollback() { # 7 · back to the previous revision
     # Set PREVIOUS_REVISION yourself to skip the lookup and paste the name from the list above.
     previous="${PREVIOUS_REVISION:-}"
     if [ -z "$previous" ]; then
-        previous="$(capture "gcloud run revisions list --service $SERVICE --region $REGION \
---sort-by '~metadata.creationTimestamp' --limit 2 --format 'value(metadata.name)' | tail -1" \
+        # The revision that still serves the share the canary did not take. Not "the second
+        # newest revision": an old candidate from an earlier run would win that.
+        previous="$(capture "gcloud run services describe $SERVICE --region $REGION --format json \
+| jq -r '[.status.traffic[] | select((.percent // 0) > 0 and .tag == null)] | max_by(.percent) | .revisionName // empty'" \
 "$SERVICE-00001-abc")"
     fi
-    [ -n "$previous" ] || die "no previous revision found. Read the name from the list above, then:
+    [ -n "$previous" ] || die "no revision serves traffic besides the candidate. Read the name from the list above, then:
   PREVIOUS_REVISION=<name> ./demo/demo.sh rollback"
     say "all traffic back to $previous"
     run "gcloud run services update-traffic $SERVICE --region $REGION \

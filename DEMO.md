@@ -119,7 +119,8 @@ gcloud run services update-traffic lucerne-temp --region $REGION --to-tags candi
 for i in $(seq 40); do curl -s $URL/health | jq -r .model_version; done | sort | uniq -c
 ```
 
-On 17.09.2026 that gave `39 "7"` and `1 "8"`. It is a random split, so expect roughly 4 in 40,
+Wait about 10 s after the traffic update before counting (the script does); the new split
+needs a moment to reach every front end. On 17.09.2026 that gave `39 "7"` and `1 "8"`. It is a random split, so expect roughly 4 in 40,
 sometimes 0 or 1. Say the expected number out loud *before* running it.
 
 ### 7 · Rollback
@@ -172,5 +173,6 @@ git checkout registry/registry.json
 
 Each step echoes the command before running it, so the audience sees what you typed.
 `status` answers "where are we now?" at any point. `rollback` finds the previous revision
-itself; if that lookup comes back empty, read the name from the list it prints and re-run with
+itself: the untagged revision that still serves traffic next to the candidate, so run it
+after `canary`, not after `--to-latest`. If that lookup comes back empty, read the name from the list it prints and re-run with
 `PREVIOUS_REVISION=<name> ./demo/demo.sh rollback`.
