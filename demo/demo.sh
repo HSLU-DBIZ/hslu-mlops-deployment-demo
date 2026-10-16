@@ -2,7 +2,7 @@
 # Lecture demo driver for lucerne-temp. One function per live step; see DEMO.md.
 #
 #   ./demo/demo.sh health|predict|logs|gate|candidate|canary|rollback|status
-#   ./demo/demo.sh prepare          # build, push, deploy v7 (before class)
+#   ./demo/demo.sh prepare          # build, push, deploy v1 (before class)
 #   ./demo/demo.sh all              # rehearsal: every live step in order
 #   ./demo/demo.sh --dry-run all    # print the commands, touch nothing
 #
@@ -72,18 +72,18 @@ resolve_url() {
 
 # --- steps ---------------------------------------------------------------
 
-step_prepare() { # before class: build, push, deploy v7
+step_prepare() { # before class: build, push, deploy v1
     need_project
-    say "build both images and deploy v7 (about 4 minutes in total)"
-    run "docker build --platform linux/amd64 -t $IMAGE:v7 ."
-    run "docker push $IMAGE:v7"
-    say "v8 image: promote locally first, build, then put the alias back"
-    run "uv run python scripts/promote.py 8"
-    run "docker build --platform linux/amd64 -t $IMAGE:v8 ."
-    run "docker push $IMAGE:v8"
+    say "build both images and deploy v1 (about 4 minutes in total)"
+    run "docker build --platform linux/amd64 -t $IMAGE:v1 ."
+    run "docker push $IMAGE:v1"
+    say "v2 image: promote locally first, build, then put the alias back"
+    run "uv run python scripts/promote.py 2"
+    run "docker build --platform linux/amd64 -t $IMAGE:v2 ."
+    run "docker push $IMAGE:v2"
     run "git checkout registry/registry.json"
-    say "deploy v7 and warm the container"
-    run "gcloud run deploy $SERVICE --image $IMAGE:v7 --region $REGION --allow-unauthenticated"
+    say "deploy v1 and warm the container"
+    run "gcloud run deploy $SERVICE --image $IMAGE:v1 --region $REGION --allow-unauthenticated"
     resolve_url
     run "curl -s $URL/health | $(JQ .)"
 }
@@ -110,16 +110,16 @@ resource.labels.service_name=\"$SERVICE\" AND jsonPayload.event=\"prediction\"' 
 
 step_gate() { # 3 · promotion is a decision, not a deploy
     say "changes registry/registry.json; reset with: git checkout registry/registry.json"
-    run "uv run python scripts/promote.py 8"
+    run "uv run python scripts/promote.py 2"
     run "uv run python scripts/champion_version.py"
 }
 
 step_candidate() { # 4+5 · a revision nobody sees yet
     need_project
     resolve_url
-    run "gcloud run deploy $SERVICE --image $IMAGE:v8 --region $REGION \
+    run "gcloud run deploy $SERVICE --image $IMAGE:v2 --region $REGION \
 --no-traffic --tag candidate"
-    say "the candidate answers 8, the service still answers 7"
+    say "the candidate answers 2, the service still answers 1"
     run "curl -s $CANDIDATE_URL/health | $(JQ -r\ .model_version)"
     run "curl -s $URL/health | $(JQ -r\ .model_version)"
 }
@@ -128,7 +128,7 @@ step_canary() { # 6 · 10 % of the traffic
     resolve_url
     run "gcloud run services update-traffic $SERVICE --region $REGION --to-tags candidate=10"
     # The new split can take a few seconds to reach every front end; counting at once can
-    # show 40 × "7" even at 10 %.
+    # show 40 × "1" even at 10 %.
     say "give the new split a moment to arrive"
     run "sleep ${CANARY_WAIT:-10}"
     say "40 requests, counted by model version"
@@ -176,12 +176,12 @@ usage() {
 usage: ./demo/demo.sh [--dry-run] <step>
 
 steps
-  prepare    build + push v7 and v8, deploy v7, warm it        (before class)
+  prepare    build + push v1 and v2, deploy v1, warm it        (before class)
   health     GET /health                                       (live 1)
   predict    POST /predict, and a 422                          (live 1)
   logs       the structured prediction log                     (live 2)
   gate       the promotion gate, locally                       (live 3)
-  candidate  deploy v8 with --no-traffic --tag candidate       (live 4+5)
+  candidate  deploy v2 with --no-traffic --tag candidate       (live 4+5)
   canary     10 % to the candidate, 40 requests counted        (live 6)
   rollback   all traffic back to the previous revision         (live 7)
   status     current traffic split and what each URL answers

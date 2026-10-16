@@ -17,7 +17,7 @@ def test_health_reports_model_version_and_feature_time(client):
     body = client.get("/health").json()
     assert set(body) == {"status", "model_version", "feature_time", "feature_source"}
     assert body["status"] == "ok"
-    assert body["model_version"] == "7"
+    assert body["model_version"] == "1"
 
 
 def test_predict_response_fields(client):
@@ -27,7 +27,7 @@ def test_predict_response_fields(client):
     assert set(body) == {
         "valid_time", "temperature_c", "model_version", "feature_time", "feature_source",
     }  # fmt: skip
-    assert body["model_version"] == "7"
+    assert body["model_version"] == "1"
     assert -30 < body["temperature_c"] < 45
 
 
@@ -64,7 +64,7 @@ def test_every_prediction_is_logged_as_one_json_line(client, capsys):
             "temperature_c", "latency_ms"} <= set(log)  # fmt: skip
 
 
-@pytest.mark.parametrize("version, logs_daily_feature", [("7", False), ("8", True)])
+@pytest.mark.parametrize("version, logs_daily_feature", [("1", False), ("2", True)])
 def test_log_holds_exactly_the_features_the_loaded_model_uses(
     store, capsys, version, logs_daily_feature
 ):
@@ -78,6 +78,6 @@ def test_log_holds_exactly_the_features_the_loaded_model_uses(
 
 
 def test_service_follows_the_alias(store):
-    store.set_alias("champion", "8")
+    store.set_alias("champion", "2")
     with TestClient(app) as client:
-        assert client.get("/health").json()["model_version"] == "8"
+        assert client.get("/health").json()["model_version"] == "2"

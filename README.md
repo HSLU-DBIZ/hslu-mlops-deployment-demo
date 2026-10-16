@@ -12,7 +12,7 @@ is in [EXERCISE.md](EXERCISE.md).
 |---|---|
 | Service | `lucerne-temp` (Cloud Run, region `europe-west6`) |
 | Registered model | `temp-forecaster` |
-| Registry alias | `champion` (v7 in this repo; v8 is the candidate) |
+| Registry alias | `champion` (v1 in this repo; v2 is the candidate) |
 | Live URL | none: you deploy your own in the exercise, and delete it afterwards |
 
 ## Architecture
@@ -69,13 +69,13 @@ OPEN_METEO_URL=http://localhost:9 uv run uvicorn lucerne_temp.inference.api:app 
 `GET /health` is what the deploy smoke test reads.
 
 ```json
-{"status": "ok", "model_version": "7", "feature_time": "2026-09-17T13:00:00Z", "feature_source": "live"}
+{"status": "ok", "model_version": "1", "feature_time": "2026-09-17T13:00:00Z", "feature_source": "live"}
 ```
 
 `POST /predict` with `{"hours_ahead": 3}` (integer 1 to 24, default 1; anything else is a 422):
 
 ```json
-{"valid_time": "2026-09-17T16:00:00Z", "temperature_c": 17.61, "model_version": "7",
+{"valid_time": "2026-09-17T16:00:00Z", "temperature_c": 17.61, "model_version": "1",
  "feature_time": "2026-09-17T13:00:00Z", "feature_source": "live"}
 ```
 
@@ -83,7 +83,7 @@ All times are UTC. Every prediction also writes one JSON line to stdout, which C
 turns into a structured log entry:
 
 ```json
-{"event": "prediction", "ts": "2026-09-17T13:49:49.588249+00:00", "model_version": "7",
+{"event": "prediction", "ts": "2026-09-17T13:49:49.588249+00:00", "model_version": "1",
  "feature_time": "2026-09-17T13:00:00+00:00", "feature_source": "live",
  "features": {"temp_now": 19.0, "lag_1": 18.5, "...": "..."},
  "hours_ahead": 3, "temperature_c": 17.61, "latency_ms": 83.2}
@@ -104,7 +104,7 @@ trained on. Mean absolute error in °C on that window, next to the persistence b
 (forecast = the last observed value). These are the numbers `train` prints, and they are
 stored in `registry/registry.json`:
 
-| Horizon | v7 | v8 | Persistence |
+| Horizon | v1 | v2 | Persistence |
 |---|---|---|---|
 | all 1–24 h | 2.315 | 2.192 | 4.263 |
 | 1 h | 1.101 | 1.311 | **0.868** |
@@ -121,12 +121,12 @@ Read it honestly:
   If you need the 1 h forecast, use the last observation.
 - From 3 hours on, both versions beat persistence clearly. At 24 hours persistence is strong
   again (same hour yesterday), and the margin is small.
-- v8 adds one feature, the temperature 24 h before the valid time. It is better overall and
+- v2 adds one feature, the temperature 24 h before the valid time. It is better overall and
   from 6 h on, and worse at 1 h and 3 h. The gate compares the overall MAE only.
 - This is one test window of 14 days from one season. The hyperparameters were set once and
   not searched. Treat the numbers as a sanity check, not as a benchmark.
 
-v7 and v8 differ only in `feature_set` (`base` vs `daily`), see `registry/registry.json`.
+v1 and v2 differ only in `feature_set` (`base` vs `daily`), see `registry/registry.json`.
 
 ## Registry and promotion
 
@@ -137,14 +137,14 @@ lucerne_temp.training.train`), and locally on first use, into `artifacts/` (git-
 Training is deterministic (fixed seed, byte-identical artifact on the same platform).
 
 ```bash
-uv run python scripts/champion_version.py   # 7
-uv run python scripts/promote.py 8          # the gate
+uv run python scripts/champion_version.py   # 1
+uv run python scripts/promote.py 2          # the gate
 ```
 
 The gate scores candidate and champion on the same window (the last 7 days of the snapshot,
 unseen by both) with the same metric, and moves the alias only if the candidate is better.
 Exit code 1 means "not promoted", so a scheduled retrain would show a failed run.
-Promotion changes `registry/registry.json`; commit it, and the next image build contains v8.
+Promotion changes `registry/registry.json`; commit it, and the next image build contains v2.
 
 ### Rollback: write both commands down before you need them
 
@@ -159,7 +159,7 @@ gcloud run services update-traffic lucerne-temp --region europe-west6 \
 Bad model: move the alias back, commit, redeploy (the service resolves the alias at startup).
 
 ```bash
-uv run python scripts/promote.py 7 --force
+uv run python scripts/promote.py 1 --force
 ```
 
 ### From the file registry to MLflow
@@ -188,7 +188,7 @@ class MlflowModelStore:                       # same three methods as FileModelS
 |---|---|
 | `registry/registry.json` | model registry on the tracking server |
 | `aliases.champion` | alias `champion`, `models:/temp-forecaster@champion` |
-| `versions.8.params`, `metrics` | the run's params and metrics |
+| `versions.2.params`, `metrics` | the run's params and metrics |
 | artifact rebuilt from the snapshot | artifact stored by the run, downloaded at startup |
 | alias moves by a commit | alias moves by an API call; redeploy or reload to pick it up |
 
@@ -259,8 +259,8 @@ To refresh the snapshot (this changes every metric above, and `tests/test_regist
 
 ```bash
 uv run python -m lucerne_temp.features.backfill
-uv run python -m lucerne_temp.training.train --version 7 --register
-uv run python -m lucerne_temp.training.train --version 8 --register
+uv run python -m lucerne_temp.training.train --version 1 --register
+uv run python -m lucerne_temp.training.train --version 2 --register
 ```
 
 ## Data and licence

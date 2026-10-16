@@ -13,21 +13,21 @@ from lucerne_temp.training.train import train
 
 @pytest.fixture(scope="session")
 def trained_artifacts(tmp_path_factory):
-    """Train v7 and v8 once per test session."""
+    """Train v1 and v2 once per test session."""
     artifact_dir = tmp_path_factory.mktemp("artifacts")
     store = FileModelStore(artifact_dir=artifact_dir)
-    return artifact_dir, {v: train(v, store) for v in ("7", "8")}
+    return artifact_dir, {v: train(v, store) for v in ("1", "2")}
 
 
 @pytest.fixture
 def store(trained_artifacts, tmp_path, monkeypatch):
-    """A registry copy with champion = 7, so tests never touch registry/registry.json."""
+    """A registry copy with champion = 1, so tests never touch registry/registry.json."""
     registry_path = tmp_path / "registry.json"
     shutil.copy(config.REGISTRY_PATH, registry_path)
     monkeypatch.setattr(config, "REGISTRY_PATH", registry_path)
     monkeypatch.setattr(config, "ARTIFACT_DIR", trained_artifacts[0])
     store = FileModelStore()
-    store.set_alias("champion", "7")
+    store.set_alias("champion", "1")
     return store
 
 

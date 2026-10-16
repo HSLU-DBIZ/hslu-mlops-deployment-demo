@@ -1,10 +1,10 @@
 {
   "name": "temp-forecaster",
   "aliases": {
-    "champion": "7"
+    "champion": "1"
   },
   "versions": {
-    "7": {
+    "1": {
       "description": "short lags and hour of day",
       "feature_set": "base",
       "params": {
@@ -47,8 +47,8 @@
         }
       }
     },
-    "8": {
-      "description": "v7 plus the temperature 24 h before the valid time",
+    "2": {
+      "description": "v1 plus the temperature 24 h before the valid time",
       "feature_set": "daily",
       "params": {
         "max_iter": 200,

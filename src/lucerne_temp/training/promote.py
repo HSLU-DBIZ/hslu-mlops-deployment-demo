@@ -1,4 +1,4 @@
-"""Promotion gate: python scripts/promote.py 8
+"""Promotion gate: python scripts/promote.py 2
 
 Scores candidate and champion on the same recent window with the same metric and moves
 the alias champion only if the candidate is better. Exit code 1 means "not promoted".
@@ -38,7 +38,7 @@ def gate(candidate: str, store: FileModelStore | None = None) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version", help="candidate version, e.g. 8")
+    parser.add_argument("version", help="candidate version, e.g. 2")
     parser.add_argument("--force", action="store_true",
                         help="move the alias without the gate (model rollback)")  # fmt: skip
     args = parser.parse_args()

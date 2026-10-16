@@ -1,4 +1,4 @@
-"""Training pipeline: python -m lucerne_temp.training.train --version 7
+"""Training pipeline: python -m lucerne_temp.training.train --version 1
 
 Reads the committed snapshot, builds features with the shared feature function, trains
 the version described in registry/registry.json and saves the artifact to artifacts/.

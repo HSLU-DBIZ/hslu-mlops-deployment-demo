@@ -16,5 +16,5 @@ def test_batch_writes_24_rows_with_version_and_timestamp(store, tmp_path, monkey
     ]  # fmt: skip
     assert len(df) == 24
     assert (df["valid_time"] - df["feature_time"] == pd.to_timedelta(df["hours_ahead"], "h")).all()
-    assert set(df["model_version"].astype(str)) == {"7"}
+    assert set(df["model_version"].astype(str)) == {"1"}
     assert set(df["feature_source"]) == {"snapshot"}

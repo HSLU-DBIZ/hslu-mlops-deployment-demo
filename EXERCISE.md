@@ -7,7 +7,7 @@ About 60 minutes. Parts A to C and F are the core; D and E are optional.
 | 0 | Prerequisites, a GCP project with billing | before class, 5 min |
 | A | Run it locally, with uv and with Docker | 10 min |
 | B | Deploy to Cloud Run from your laptop or Cloud Shell | 15 min |
-| C | Promote v8, deploy a candidate, split traffic, roll back | 20 min |
+| C | Promote v2, deploy a candidate, split traffic, roll back | 20 min |
 | D | Optional: deploy from GitHub Actions without keys | 15 min |
 | E | Optional: batch job and UI | 5 min |
 | F | Clean up | 5 min |
@@ -161,17 +161,17 @@ gcloud auth configure-docker $REGION-docker.pkg.dev
 
 ```bash
 export IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/ml/lucerne-temp
-docker build --platform linux/amd64 -t $IMAGE:v7 .
-docker push $IMAGE:v7
+docker build --platform linux/amd64 -t $IMAGE:v1 .
+docker push $IMAGE:v1
 ```
 
    No Docker? Let Cloud Build do both steps:
-   `gcloud services enable cloudbuild.googleapis.com && gcloud builds submit --tag $IMAGE:v7`
+   `gcloud services enable cloudbuild.googleapis.com && gcloud builds submit --tag $IMAGE:v1`
 
 4. Deploy. `--allow-unauthenticated` makes the URL public, which is what "live" means for MS4.
 
 ```bash
-gcloud run deploy lucerne-temp --image $IMAGE:v7 --region $REGION --allow-unauthenticated
+gcloud run deploy lucerne-temp --image $IMAGE:v1 --region $REGION --allow-unauthenticated
 ```
 
 5. Read the model version from the running service.
@@ -195,40 +195,40 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
   --limit 5 --freshness 1h --format 'value(jsonPayload)'
 ```
 
-## C · Promote v8, canary, roll back
+## C · Promote v2, canary, roll back
 
-1. Run the promotion gate. It scores v8 and v7 on the same last 7 days and moves the alias
-   only if v8 is better. Look at what changed.
+1. Run the promotion gate. It scores v2 and v1 on the same last 7 days and moves the alias
+   only if v2 is better. Look at what changed.
 
 ```bash
-uv run python scripts/promote.py 8
+uv run python scripts/promote.py 2
 git diff registry/registry.json
-uv run python scripts/champion_version.py      # 8
+uv run python scripts/champion_version.py      # 2
 ```
 
 2. Commit the promotion on a branch (in part D a push to main deploys by itself).
 
 ```bash
-git switch -c promote-v8
-git commit -am "Promote temp-forecaster v8 to champion"
+git switch -c promote-v2
+git commit -am "Promote temp-forecaster v2 to champion"
 ```
 
 3. Build the new image and deploy it as a second revision **without traffic**, tagged `candidate`.
 
 ```bash
-docker build --platform linux/amd64 -t $IMAGE:v8 .
-docker push $IMAGE:v8
-gcloud run deploy lucerne-temp --image $IMAGE:v8 --region $REGION --no-traffic --tag candidate
+docker build --platform linux/amd64 -t $IMAGE:v2 .
+docker push $IMAGE:v2
+gcloud run deploy lucerne-temp --image $IMAGE:v2 --region $REGION --no-traffic --tag candidate
 ```
 
-4. Smoke test the candidate on its own URL. Users still get v7. The tag URL is the service URL
+4. Smoke test the candidate on its own URL. Users still get v1. The tag URL is the service URL
    from `services describe` (part B5) with `candidate---` in front. The deploy output in step 3
    prints it too: "The revision can be reached directly at https://candidate---…".
 
 ```bash
 export CANDIDATE_URL="https://candidate---${URL#https://}"
-curl -s $CANDIDATE_URL/health | jq .model_version      # "8"
-curl -s $URL/health | jq .model_version                # "7"
+curl -s $CANDIDATE_URL/health | jq .model_version      # "2"
+curl -s $URL/health | jq .model_version                # "1"
 ```
 
 5. Canary: 10 % of the traffic to the candidate. Count which version answers.
@@ -239,15 +239,16 @@ sleep 10                                               # let the new split arriv
 for i in $(seq 40); do curl -s $URL/health | jq -r .model_version; done | sort | uniq -c
 ```
 
-Expect about 36 × `7` and 4 × `8`; the split is random, so 2 or 6 is fine too. Counting right
-after the traffic update can show 40 × `7` even at 10 %: the new split takes a few seconds to
+Expect about 36 answers `1` and 4 answers `2`; the split is random, so anywhere from 2 to 6
+answers from v2 is fine too. Counting right
+after the traffic update can show 40 × `1` even at 10 %: the new split takes a few seconds to
 reach every front end. Wait and count again.
 
 6. All good: everything to the newest revision.
 
 ```bash
 gcloud run services update-traffic lucerne-temp --region $REGION --to-latest
-curl -s $URL/health | jq .model_version                # "8"
+curl -s $URL/health | jq .model_version                # "2"
 ```
 
    The output shows `candidate (Deleting)` next to the tag URL. Ignore it: the tag is still
@@ -258,15 +259,15 @@ curl -s $URL/health | jq .model_version                # "8"
 ```bash
 gcloud run revisions list --service lucerne-temp --region $REGION
 gcloud run services update-traffic lucerne-temp --region $REGION \
-  --to-revisions <name-of-the-v7-revision>=100
-curl -s $URL/health | jq .model_version                # "7"
+  --to-revisions <name-of-the-v1-revision>=100
+curl -s $URL/health | jq .model_version                # "1"
 ```
 
    Traffic is now pinned to that revision: a later `gcloud run deploy` will not receive traffic
    until you run `update-traffic --to-latest` again.
 
-8. Think: step 7 rolled back the *service*. The alias `champion` still says 8. When is that
-   the right rollback, and when would you run `uv run python scripts/promote.py 7 --force`,
+8. Think: step 7 rolled back the *service*. The alias `champion` still says 2. When is that
+   the right rollback, and when would you run `uv run python scripts/promote.py 1 --force`,
    commit and redeploy instead?
 
 ## D · Optional: deploy from GitHub Actions, without keys
@@ -329,7 +330,7 @@ gh variable set WIF_PROVIDER   --repo $REPO --body \
    Then merge and push the promotion from part C. IAM changes can take a few minutes to arrive.
 
 ```bash
-git switch main && git merge promote-v8 && git push
+git switch main && git merge promote-v2 && git push
 gh run watch --repo $REPO
 ```
 
@@ -346,8 +347,8 @@ API_URL=$URL uv run --group ui streamlit run ui/app.py
 ```
 
 The page reads `predictions/latest.csv` for the chart and calls `$URL/predict` for the button.
-Both show the model version. After part C they can disagree (file from v8, service rolled back
-to v7): that is the "both paths must report the same version" check from the lecture.
+Both show the model version. After part C they can disagree (file from v2, service rolled back
+to v1): that is the "both paths must report the same version" check from the lecture.
 `.github/workflows/predict.yml` runs the same batch job every hour on GitHub's runner.
 
 ## F · Clean up

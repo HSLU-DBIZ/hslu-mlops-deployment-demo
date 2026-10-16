@@ -19,16 +19,16 @@ export IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/ml/lucerne-temp
 command -v jq                            # the demo pipes through jq
 ```
 
-Build and push both images, deploy v7, warm it. `demo/demo.sh prepare` does exactly this.
+Build and push both images, deploy v1, warm it. `demo/demo.sh prepare` does exactly this.
 
 ```bash
-docker build --platform linux/amd64 -t $IMAGE:v7 .     # ~1.5 min
-docker push $IMAGE:v7                                  # ~30 s
-uv run python scripts/promote.py 8                     # champion -> 8, so the image bakes v8
-docker build --platform linux/amd64 -t $IMAGE:v8 .
-docker push $IMAGE:v8
-git checkout registry/registry.json                    # back to champion = 7 for the live gate
-gcloud run deploy lucerne-temp --image $IMAGE:v7 --region $REGION --allow-unauthenticated
+docker build --platform linux/amd64 -t $IMAGE:v1 .     # ~1.5 min
+docker push $IMAGE:v1                                  # ~30 s
+uv run python scripts/promote.py 2                     # champion -> 2, so the image bakes v2
+docker build --platform linux/amd64 -t $IMAGE:v2 .
+docker push $IMAGE:v2
+git checkout registry/registry.json                    # back to champion = 1 for the live gate
+gcloud run deploy lucerne-temp --image $IMAGE:v1 --region $REGION --allow-unauthenticated
 export URL=$(gcloud run services describe lucerne-temp --region $REGION --format 'value(status.url)')
 curl -s $URL/health | jq                               # warm the container: no cold start on stage
 ```
@@ -40,8 +40,8 @@ Leave a browser tab open on **Cloud Run → lucerne-temp → Revisions**, logged
 Last check before you start:
 
 ```bash
-curl -s $URL/health | jq          # "model_version": "7", "feature_source": "live"
-uv run python scripts/champion_version.py    # 7
+curl -s $URL/health | jq          # "model_version": "1", "feature_source": "live"
+uv run python scripts/champion_version.py    # 1
 ```
 
 ## Live (about 8 minutes)
@@ -77,23 +77,23 @@ shows them expandable, which reads better on a projector.
 ### 3 · The gate decides, not the person (instant, local)
 
 ```bash
-uv run python scripts/promote.py 8
+uv run python scripts/promote.py 2
 ```
 
 ```
-last 7 days: candidate v8 MAE 1.925 °C, champion v7 MAE 2.159 °C
-promoted: champion -> v8. Commit registry/registry.json and deploy.
+last 7 days: candidate v2 MAE 1.925 °C, champion v1 MAE 2.159 °C
+promoted: champion -> v2. Commit registry/registry.json and deploy.
 ```
 
 > "Same window, same metric. Worse candidate, no promotion, and nothing gets deployed."
 
 This writes `registry/registry.json`. Reset it with `git checkout registry/registry.json`,
-or move the alias back with `uv run python scripts/promote.py 7 --force`.
+or move the alias back with `uv run python scripts/promote.py 1 --force`.
 
 ### 4 · A revision nobody sees yet (about 40 s)
 
 ```bash
-gcloud run deploy lucerne-temp --image $IMAGE:v8 --region $REGION --no-traffic --tag candidate
+gcloud run deploy lucerne-temp --image $IMAGE:v2 --region $REGION --no-traffic --tag candidate
 ```
 
 While it runs: a *revision* is one immutable version of the service, a *service* is the URL plus
@@ -105,8 +105,8 @@ nobody to it; `--tag candidate` gives it a private URL. The output ends with
 
 ```bash
 export CANDIDATE_URL="https://candidate---${URL#https://}"
-curl -s $CANDIDATE_URL/health | jq -r .model_version     # 8
-curl -s $URL/health | jq -r .model_version               # 7
+curl -s $CANDIDATE_URL/health | jq -r .model_version     # 2
+curl -s $URL/health | jq -r .model_version               # 1
 ```
 
 > "The new model is deployed and reachable, and no user has touched it. This is the smoke test
@@ -120,7 +120,7 @@ for i in $(seq 40); do curl -s $URL/health | jq -r .model_version; done | sort |
 ```
 
 Wait about 10 s after the traffic update before counting (the script does); the new split
-needs a moment to reach every front end. On 17.09.2026 that gave `39 "7"` and `1 "8"`. It is a random split, so expect roughly 4 in 40,
+needs a moment to reach every front end. On 17.09.2026 that gave 39 answers from v1 and 1 from v2. It is a random split, so expect roughly 4 in 40,
 sometimes 0 or 1. Say the expected number out loud *before* running it.
 
 ### 7 · Rollback
@@ -128,8 +128,8 @@ sometimes 0 or 1. Say the expected number out loud *before* running it.
 ```bash
 gcloud run revisions list --service lucerne-temp --region $REGION
 gcloud run services update-traffic lucerne-temp --region $REGION \
-  --to-revisions <name-of-the-v7-revision>=100
-curl -s $URL/health | jq -r .model_version               # 7
+  --to-revisions <name-of-the-v1-revision>=100
+curl -s $URL/health | jq -r .model_version               # 1
 ```
 
 > "No rebuild, no redeploy. The old revision never went away."
@@ -145,10 +145,10 @@ candidate, and the revision list as the deployment history.
 |---|---|
 | No network, or GCP unreachable | Play the screencast (record one the week before: 3 min, steps 1–7). Then the deploy-pipeline animation in Part 3 of the deck tells the same story without a cloud. |
 | Docker build fails on stage | Both images are already pushed. Skip to step 4; nothing in steps 1–7 rebuilds. |
-| Gate says "not promoted" / champion is already 8 | `git checkout registry/registry.json`, then run step 3 again. |
+| Gate says "not promoted" / champion is already 2 | `git checkout registry/registry.json`, then run step 3 again. |
 | Wrong project or nothing found | `gcloud config configurations list` — is `hslu-mlops` ACTIVE? Then re-`export` the variables. |
 | `$URL` empty or 404 | `export URL=$(gcloud run services describe lucerne-temp --region $REGION --format 'value(status.url)')` |
-| Step 6 shows 40 × "7" | Fine, it is random. Run the loop once more, or raise the split to 50. |
+| Step 6 shows 40 × "1" | Fine, it is random. Run the loop once more, or raise the split to 50. |
 | `--to-latest` prints "candidate (Deleting)" | Ignore it, the tag survives; `gcloud run services describe lucerne-temp --region $REGION` shows it. |
 | First request is slow | Cold start. Say so: it is the trade-off of scale-to-zero, and it is on the Operate slides. |
 
