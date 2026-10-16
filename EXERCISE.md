@@ -4,7 +4,7 @@ About 60 minutes. Parts A to C and F are the core; D and E are optional.
 
 | Part | What | Time |
 |---|---|---|
-| 0 | Prerequisites | before class |
+| 0 | Prerequisites, a GCP project with billing | before class, 5 min |
 | A | Run it locally, with uv and with Docker | 10 min |
 | B | Deploy to Cloud Run from your laptop or Cloud Shell | 15 min |
 | C | Promote v8, deploy a candidate, split traffic, roll back | 20 min |
@@ -19,12 +19,18 @@ About 60 minutes. Parts A to C and F are the core; D and E are optional.
 > Actions documentation but **not executed**. If a command fails for you, read the error,
 > check `gcloud <command> --help`, and tell us.
 
+Part 0 uses the gcloud commands of last semester's setup notebook; the budget command in
+step 0.4 was checked against the documentation but not executed.
+
 All commands assume a bash or zsh shell in the repository root. On Windows use WSL or Cloud Shell.
 
-## 0 · Prerequisites
+## 0 · Prerequisites and a GCP project
 
-1. Google Cloud credits redeemed and a project with billing linked (`gcp_fundamentals.ipynb`).
-2. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed, `gcloud auth login` done.
+Tools:
+
+1. Google Cloud education coupon redeemed (course slides, "GCP credits"). This gives you a
+   billing account with the credit on it.
+2. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed.
    Or use [Cloud Shell](https://shell.cloud.google.com), which has gcloud, Docker, git and jq.
 3. Docker Desktop running (not needed in Cloud Shell).
 4. [uv](https://docs.astral.sh/uv/getting-started/installation/) and `jq`
@@ -35,6 +41,48 @@ All commands assume a bash or zsh shell in the repository root. On Windows use W
 git clone https://github.com/<your-user>/hslu-mlops-deployment-demo.git
 cd hslu-mlops-deployment-demo
 ```
+
+A project with billing, once (about 5 minutes). Already have one from another course? Skip
+to step 4 and use its ID.
+
+1. Log in.
+
+```bash
+gcloud auth login
+```
+
+2. Create a project and make it the default. Project IDs are global across all of Google
+   Cloud: `mlops-hslu-` plus your initials and a number usually works. If `create` fails,
+   the ID is taken; pick another.
+
+```bash
+export PROJECT_ID=mlops-hslu-<your-id>
+gcloud projects create $PROJECT_ID
+gcloud config set project $PROJECT_ID
+```
+
+3. Link the billing account that came with your coupon. Without it, enabling any API in
+   part B fails.
+
+```bash
+gcloud billing accounts list                     # copy the ACCOUNT_ID
+gcloud billing projects link $PROJECT_ID --billing-account <ACCOUNT_ID>
+gcloud billing projects describe $PROJECT_ID     # billingEnabled: true
+```
+
+4. Set a budget alert, so a forgotten resource cannot eat the credit unnoticed. Easiest in
+   the Console: Billing → Budgets & alerts → Create budget, scope this project, amount
+   USD 50, alerts at 50 % and 90 %. Or with gcloud (use your billing account's currency):
+
+```bash
+gcloud services enable billingbudgets.googleapis.com
+gcloud billing budgets create --billing-account <ACCOUNT_ID> \
+  --display-name mlops-hslu --budget-amount 50USD \
+  --filter-projects projects/$PROJECT_ID \
+  --threshold-rule percent=0.5 --threshold-rule percent=0.9
+```
+
+   A budget only sends alerts; it does not stop spending. Part F still matters.
 
 ## A · Run it locally
 
@@ -329,9 +377,11 @@ gcloud artifacts repositories list
 Prices: [Cloud Run](https://cloud.google.com/run/pricing) ·
 [Artifact Registry](https://cloud.google.com/artifact-registry/pricing)
 
-## Make it yours
+## What to take to your project
 
-This repository is the skeleton of an MS4 inference service. To reuse it: replace
-`features/ingest.py` with reads from your feature store, `FileModelStore` with MLflow
-(README: "From the file registry to MLflow"), keep `/health`, the response fields, the
-prediction log, the smoke test, and write your two rollback commands into your README.
+This repository is an inspiration, not a template: it shows one way to do each step, and your
+MS4 service should not be a copy of it. Your project has its own data, model and decisions.
+The ideas worth carrying over: a `/health` that reports the model version, responses that say
+which model and which data produced them, a prediction log, a smoke test before traffic moves,
+a promotion gate, and two rollback commands in your README. Build them your way, and explain
+your choices in the README.

@@ -6,7 +6,7 @@ service that you fork, deploy to Google Cloud Run, update, and roll back. The ha
 is in [EXERCISE.md](EXERCISE.md).
 
 > Course example for HSLU MLOps HS26. Not available as a student project topic.
-> You may reuse the structure as the skeleton of your own inference service.
+> Use it for ideas, not as a template: your own service should not be a copy of it.
 
 | | |
 |---|---|
