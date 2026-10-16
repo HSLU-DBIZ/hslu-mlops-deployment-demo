@@ -235,8 +235,13 @@ curl -s $URL/health | jq .model_version                # "7"
 
 ```bash
 gcloud run services update-traffic lucerne-temp --region $REGION --to-tags candidate=10
+sleep 10                                               # let the new split arrive
 for i in $(seq 40); do curl -s $URL/health | jq -r .model_version; done | sort | uniq -c
 ```
+
+Expect about 36 × `7` and 4 × `8`; the split is random, so 2 or 6 is fine too. Counting right
+after the traffic update can show 40 × `7` even at 10 %: the new split takes a few seconds to
+reach every front end. Wait and count again.
 
 6. All good: everything to the newest revision.
 
