@@ -79,6 +79,10 @@ OPEN_METEO_URL=http://localhost:9 uv run uvicorn lucerne_temp.inference.api:app 
  "feature_time": "2026-09-17T13:00:00Z", "feature_source": "live"}
 ```
 
+`POST /v1/predict` is the same prediction in the Agent Platform (Vertex AI) contract, for
+EXERCISE part G: `{"instances": [{"hours_ahead": 3}, ...]}` in,
+`{"predictions": [<one /predict response per instance>]}` out, in the same order.
+
 All times are UTC. Every prediction also writes one JSON line to stdout, which Cloud Run
 turns into a structured log entry:
 

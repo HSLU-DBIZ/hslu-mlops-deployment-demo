@@ -81,3 +81,23 @@ def test_service_follows_the_alias(store):
     store.set_alias("champion", "2")
     with TestClient(app) as client:
         assert client.get("/health").json()["model_version"] == "2"
+
+
+def test_v1_predict_answers_each_instance_in_order(client):
+    body = {"instances": [{"hours_ahead": 1}, {"hours_ahead": 6}]}
+    response = client.post("/v1/predict", json=body)
+    assert response.status_code == 200
+    preds = response.json()["predictions"]
+    assert [p["model_version"] for p in preds] == ["1", "1"]
+    assert preds[1]["valid_time"] > preds[0]["valid_time"]
+
+
+@pytest.mark.parametrize("bad", [{}, {"instances": []}, {"instances": [{"hours_ahead": 25}]}])
+def test_v1_predict_bad_input_is_a_422(client, bad):
+    assert client.post("/v1/predict", json=bad).status_code == 422
+
+
+def test_v1_predict_logs_one_line_per_instance(client, capsys):
+    client.post("/v1/predict", json={"instances": [{"hours_ahead": 2}, {"hours_ahead": 3}]})
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [x["hours_ahead"] for x in lines if x.get("event") == "prediction"] == [2, 3]

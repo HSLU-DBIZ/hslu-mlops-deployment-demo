@@ -25,3 +25,11 @@ class Health(BaseModel):
     model_version: str
     feature_time: datetime
     feature_source: FeatureSource
+
+
+class PredictInstances(BaseModel):
+    instances: list[ForecastRequest] = Field(min_length=1)
+
+
+class Predictions(BaseModel):
+    predictions: list[Forecast]  # same order as the instances

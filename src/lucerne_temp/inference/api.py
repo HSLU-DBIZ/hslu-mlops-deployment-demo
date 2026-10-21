@@ -10,7 +10,13 @@ from fastapi import FastAPI
 from lucerne_temp.features.build import serving_features
 from lucerne_temp.features.ingest import latest_temps
 from lucerne_temp.inference.model import load_champion
-from lucerne_temp.inference.schemas import Forecast, ForecastRequest, Health
+from lucerne_temp.inference.schemas import (
+    Forecast,
+    ForecastRequest,
+    Health,
+    PredictInstances,
+    Predictions,
+)
 
 state: dict = {}
 
@@ -53,3 +59,9 @@ def predict(req: ForecastRequest) -> Forecast:
     }), flush=True)  # fmt: skip
     return Forecast(valid_time=valid, temperature_c=y, model_version=state["version"],
                     feature_time=ft, feature_source=source)  # fmt: skip
+
+
+# Agent Platform (Vertex AI) contract: {"instances": [...]} in, {"predictions": [...]} out
+@app.post("/v1/predict")
+def predict_instances(req: PredictInstances) -> Predictions:
+    return Predictions(predictions=[predict(r) for r in req.instances])  # one log line each
