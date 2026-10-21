@@ -1,6 +1,7 @@
 # Exercise: deploy, update and roll back lucerne-temp
 
-About 60 minutes. Parts A to C and F are the core; D and E are optional.
+About 60 minutes. Parts A to C and F are the core; D and E are optional. Part G is an optional
+home exercise of about 45 minutes, mostly waiting.
 
 | Part | What | Time |
 |---|---|---|
@@ -11,10 +12,12 @@ About 60 minutes. Parts A to C and F are the core; D and E are optional.
 | D | Optional: deploy from GitHub Actions without keys | 15 min |
 | E | Optional: batch job and UI | 5 min |
 | F | Clean up | 5 min |
+| G | Optional, at home: the same model on Agent Platform | 45 min |
 
 > **Status of this document.** Part A and the local commands of part E were executed while
 > building this repo. Parts B and C were executed on 17.09.2026 against Cloud Run in
-> `europe-west6`, and the notes in those parts describe what was seen. Parts D and F, and
+> `europe-west6`, and the notes in those parts describe what was seen. Part G was executed on
+> 21.10.2026 against Agent Platform in `europe-west6`, with the timings it quotes. Parts D and F, and
 > writing predictions to `gs://` (part E), were checked against the current gcloud and GitHub
 > Actions documentation but **not executed**. If a command fails for you, read the error,
 > check `gcloud <command> --help`, and tell us.
@@ -147,6 +150,8 @@ export REGION=europe-west6
 gcloud config set project $PROJECT_ID
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com
 ```
+
+   Planning to do part G? It needs one more API: `gcloud services enable aiplatform.googleapis.com`.
 
 2. Create a Docker repository in Artifact Registry and let Docker push to it.
 
@@ -353,6 +358,9 @@ to v1): that is the "both paths must report the same version" check from the lec
 
 ## F · Clean up
 
+Did part G? Run its last step first: an Agent Platform endpoint bills every hour it exists
+with a model deployed.
+
 Cloud Run scales to zero and bills per request, so an idle service costs close to nothing;
 stored images are billed per GB and month beyond a small free allowance. The exercise should
 cost a few cents at most. Delete everything anyway, the credits are for your project:
@@ -378,10 +386,222 @@ Check that nothing is left:
 ```bash
 gcloud run services list
 gcloud artifacts repositories list
+gcloud ai endpoints list --region $REGION      # part G: no lucerne-temp-ep
+gcloud ai models list --region $REGION         # part G: Listed 0 items.
 ```
 
 Prices: [Cloud Run](https://cloud.google.com/run/pricing) ·
 [Artifact Registry](https://cloud.google.com/artifact-registry/pricing)
+
+## G · Optional: the same model on Agent Platform
+
+Cloud Run runs any container. Agent Platform (that is what the Google Cloud console calls it;
+formerly **Vertex AI**, and the API `aiplatform.googleapis.com`, the `gcloud ai` commands and
+the Python SDK still use the old names) is a managed model-serving platform: you register the
+container as a *model* with *versions*, deploy versions to an *endpoint*, and split traffic
+between deployed models. Same ideas as part C, different nouns.
+
+| Cloud Run (part C) | Agent Platform (part G) |
+|---|---|
+| image `:v1`, `:v2` | model `lucerne-temp`, versions 1 and 2 |
+| service URL | endpoint `lucerne-temp-ep` |
+| revision | deployed model (its own ID) |
+| `update-traffic --to-tags candidate=10` | `deploy-model ... --traffic-split <v1-id>=90,0=10` |
+| `update-traffic --to-revisions <v1>=100` | `endpoints update --traffic-split <v1-id>=100` |
+
+The container contract is a little different. Agent Platform posts
+`{"instances": [{"hours_ahead": 6}]}` to the predict route and expects
+`{"predictions": [...]}` back, one prediction per instance, in the same order. That is
+`POST /v1/predict` in `src/lucerne_temp/inference/api.py`: a thin adapter around `/predict`.
+The health route must answer 200, and the container listens on port 8080 like on Cloud Run.
+
+> **Cost.** Cloud Run scales to zero; an Agent Platform endpoint does not. Every deployed
+> model keeps at least one `n1-standard-2` node running (`--min-replica-count 1`) and bills
+> node-hours **even when nobody calls it**: in the order of USD 0.10 to 0.20 per node-hour
+> (check the pricing page for your region), twice that while two versions are deployed. A
+> forgotten endpoint costs a few dollars a day. Do the whole part in one sitting and run
+> step 9 at the end. Our test run (about 25 minutes of endpoint time) cost well under a dollar. [Pricing](https://cloud.google.com/vertex-ai/pricing#prediction-prices)
+
+You need the images `$IMAGE:v1` and `$IMAGE:v2` from parts B and C. If you already ran part F,
+recreate the repository and push both again (B2, B3, C3).
+
+1. Enable the API. Keep `$PROJECT_ID`, `$REGION` and `$IMAGE` from part B.
+
+```bash
+gcloud services enable aiplatform.googleapis.com
+```
+
+2. Upload v1 as a model. "Upload" registers the image and its routes; nothing runs yet. It
+   takes about two minutes and prints no ID, so read it back with `models list`.
+
+```bash
+gcloud ai models upload --region $REGION --display-name lucerne-temp \
+  --container-image-uri $IMAGE:v1 --container-ports 8080 \
+  --container-health-route /health --container-predict-route /v1/predict
+export MODEL_ID=$(gcloud ai models list --region $REGION \
+  --filter display_name=lucerne-temp --format 'value(name)')
+echo $MODEL_ID                                  # one long number
+```
+
+   Two numbers? You uploaded twice. Delete the extra one (`gcloud ai models delete <id> --region $REGION`).
+
+3. Create an endpoint. It is only an address and costs nothing until a model is deployed.
+
+```bash
+gcloud ai endpoints create --region $REGION --display-name lucerne-temp-ep
+export ENDPOINT_ID=$(gcloud ai endpoints list --region $REGION \
+  --filter display_name=lucerne-temp-ep --format 'value(name)')
+```
+
+4. Deploy v1 to the endpoint with all traffic. **This took 15 minutes** in our test: Agent
+   Platform starts a VM, pulls the image and waits for `/health`. Billing starts now.
+
+```bash
+gcloud ai endpoints deploy-model $ENDPOINT_ID --region $REGION --model $MODEL_ID \
+  --display-name v1 --machine-type n1-standard-2 \
+  --min-replica-count 1 --max-replica-count 3 --traffic-split 0=100
+```
+
+   You should see `Deployed a model to the endpoint ... Id of the deployed model: <number>`.
+   That ID is not the model ID: it names this *deployment* of v1 on this endpoint, like a
+   revision name. `0` in `--traffic-split` means "the model being deployed right now".
+
+5. Predict. The request body is the Agent Platform format, not the one of `/predict`.
+
+```bash
+echo '{"instances": [{"hours_ahead": 6}]}' > instances.json
+gcloud ai endpoints predict $ENDPOINT_ID --region $REGION \
+  --json-request instances.json --format json
+```
+
+   You should see (numbers differ):
+
+```json
+{
+  "deployedModelId": "5307406398949163008",
+  "model": "projects/<project-number>/locations/europe-west6/models/<model-id>",
+  "modelDisplayName": "lucerne-temp",
+  "modelVersionId": "1",
+  "predictions": [
+    {"feature_source": "live", "feature_time": "2026-10-21T14:00:00Z", "model_version": "1",
+     "temperature_c": 9.78, "valid_time": "2026-10-21T20:00:00Z"}
+  ]
+}
+```
+
+   Without `--format json`, gcloud prints only the predictions, as a Python list rather than
+   JSON, which `jq` cannot read. Two version fields now: `modelVersionId` is the platform's
+   registry, `model_version` is ours. They agree only because we uploaded v1 as version 1.
+
+6. Upload v2 as **version 2 of the same model**, then deploy it next to v1 with 10 % of the
+   traffic. `--parent-model` needs the full resource name; the bare ID fails with
+   "Location ID is not provided". The new version is `$MODEL_ID@2`. This deploy took about
+   7 minutes; v1 keeps serving all traffic until it is done.
+
+```bash
+gcloud ai models upload --region $REGION --display-name lucerne-temp \
+  --parent-model projects/$PROJECT_ID/locations/$REGION/models/$MODEL_ID \
+  --container-image-uri $IMAGE:v2 --container-ports 8080 \
+  --container-health-route /health --container-predict-route /v1/predict
+gcloud ai models list-version $MODEL_ID --region $REGION    # versions 1 and 2
+
+export V1_DEPLOYED_ID=$(gcloud ai endpoints describe $ENDPOINT_ID --region $REGION \
+  --format json | jq -r '.deployedModels[] | select(.displayName=="v1") | .id')
+gcloud ai endpoints deploy-model $ENDPOINT_ID --region $REGION --model $MODEL_ID@2 \
+  --display-name v2 --machine-type n1-standard-2 \
+  --min-replica-count 1 --max-replica-count 3 --traffic-split $V1_DEPLOYED_ID=90,0=10
+```
+
+7. Count which version answers. Each call takes about a second.
+
+```bash
+gcloud ai endpoints describe $ENDPOINT_ID --region $REGION --format 'yaml(trafficSplit)'
+for i in $(seq 40); do
+  gcloud ai endpoints predict $ENDPOINT_ID --region $REGION --json-request instances.json \
+    --format json 2>/dev/null | jq -r '.predictions[0].model_version'
+done | sort | uniq -c
+```
+
+   You should see two deployed-model IDs at 90 and 10, and about 36 × `1` and 4 × `2`. We got
+   38 and 2; anything from 1 to 7 answers from v2 is normal for 40 random draws.
+
+8. Roll back: all traffic to v1, then undeploy v2 so its node stops billing. No rebuild, no
+   new upload: the version stays in the registry.
+
+```bash
+export V2_DEPLOYED_ID=$(gcloud ai endpoints describe $ENDPOINT_ID --region $REGION \
+  --format json | jq -r '.deployedModels[] | select(.displayName=="v2") | .id')
+gcloud ai endpoints update $ENDPOINT_ID --region $REGION --traffic-split $V1_DEPLOYED_ID=100
+gcloud ai endpoints undeploy-model $ENDPOINT_ID --region $REGION --deployed-model-id $V2_DEPLOYED_ID
+gcloud ai endpoints describe $ENDPOINT_ID --region $REGION --format 'yaml(trafficSplit)'
+```
+
+   As on Cloud Run, the new split takes a few seconds to arrive: right after the update we
+   still saw 2 of 20 answers from v2. Move the traffic before you undeploy, so no request is
+   sent to a model that is going away.
+
+   The prediction log lines arrive in Cloud Logging too, but as a string in
+   `jsonPayload.message`, not as separate fields like on Cloud Run:
+
+```bash
+gcloud logging read "resource.type=\"aiplatform.googleapis.com/Endpoint\" AND resource.labels.endpoint_id=\"$ENDPOINT_ID\" AND jsonPayload.message:\"prediction\"" \
+  --limit 3 --freshness 1h --format 'value(jsonPayload.message)'
+```
+
+9. Clean up, **now**. Undeploy v1, delete the endpoint and the model (all versions). Check
+   that `lucerne-temp-ep` is gone and no model is left.
+
+```bash
+gcloud ai endpoints undeploy-model $ENDPOINT_ID --region $REGION --deployed-model-id $V1_DEPLOYED_ID
+gcloud ai endpoints delete $ENDPOINT_ID --region $REGION --quiet
+gcloud ai models delete $MODEL_ID --region $REGION --quiet
+gcloud ai endpoints list --region $REGION
+gcloud ai models list --region $REGION          # Listed 0 items.
+```
+
+   The images stay in Artifact Registry; part F deletes them.
+
+10. Think: Cloud Run or Agent Platform for your MS4 service? Compare what you just did with
+    part C: time to deploy, cost when idle, the request format, what the platform knows about
+    your model. There is no right answer; write your choice and the reason in your README.
+
+### Optional: batch prediction
+
+The same model can score a file without an endpoint: Agent Platform starts nodes, sends the
+file through `/v1/predict` in chunks, writes the results to Cloud Storage and stops. In our
+test, 5 rows took 11 minutes, almost all of it start-up. Run it before step 9 (it needs the
+model), from Python, with your user credentials:
+
+```bash
+gcloud auth application-default login
+export BUCKET=gs://$PROJECT_ID-lucerne-batch
+gcloud storage buckets create $BUCKET --location $REGION
+for h in 1 3 6 12 24; do echo "{\"hours_ahead\": $h}"; done > batch.jsonl
+gcloud storage cp batch.jsonl $BUCKET/input/batch.jsonl
+
+uv run --no-project --with google-cloud-aiplatform python - <<EOF
+from google.cloud import aiplatform
+
+aiplatform.init(project="$PROJECT_ID", location="$REGION")
+job = aiplatform.Model("$MODEL_ID").batch_predict(
+    job_display_name="lucerne-temp-batch",
+    gcs_source="$BUCKET/input/batch.jsonl",
+    gcs_destination_prefix="$BUCKET/output",
+    instances_format="jsonl",
+    machine_type="n1-standard-2",
+    starting_replica_count=1,
+    max_replica_count=1,
+)  # waits until the job is done
+print(job.state, job.output_info.gcs_output_directory)
+EOF
+
+gcloud storage cat "$BUCKET/output/*/prediction.results-*"
+```
+
+The script prints the job state (`JOB_STATE_SUCCEEDED`) and the output folder; the results
+file holds one line per input row, e.g.
+`{"instance": {"hours_ahead": 1}, "prediction": {"valid_time": "...", "temperature_c": 10.34, "model_version": "1", ...}}`.
+Then delete the bucket: `gcloud storage rm -r $BUCKET`.
 
 ## What to take to your project
 
