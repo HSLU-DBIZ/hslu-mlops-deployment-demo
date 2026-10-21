@@ -43,7 +43,8 @@ def test_gate_keeps_the_champion_when_the_candidate_is_worse(store, monkeypatch)
 
 
 def test_gate_on_the_real_models(store, capsys):
-    # EXERCISE.md part C relies on this: with the committed snapshot, v2 passes the gate.
+    # EXERCISE.md (walkthrough 1, step 5) relies on this: with the committed snapshot,
+    # v2 passes the gate.
     # If it fails after a snapshot refresh, the exercise text must change, not this test.
     assert promote.gate("2", store) is True
     assert store.version_of("champion") == "2"

@@ -80,7 +80,7 @@ OPEN_METEO_URL=http://localhost:9 uv run uvicorn lucerne_temp.inference.api:app 
 ```
 
 `POST /v1/predict` is the same prediction in the Agent Platform (Vertex AI) contract, for
-EXERCISE part G: `{"instances": [{"hours_ahead": 3}, ...]}` in,
+EXERCISE.md walkthrough 2: `{"instances": [{"hours_ahead": 3}, ...]}` in,
 `{"predictions": [<one /predict response per instance>]}` out, in the same order.
 
 All times are UTC. Every prediction also writes one JSON line to stdout, which Cloud Run
@@ -222,7 +222,7 @@ No secrets are needed. Environment variables, see `.env.example`:
 | `.github/workflows/deploy.yml` | push to main, manual | tests → keyless auth → build, push → deploy with no traffic, tag `candidate` → smoke test `/health` against the champion version → shift traffic |
 | `.github/workflows/predict.yml` | hourly, manual | batch job, predictions kept as a workflow artifact |
 
-`deploy.yml` is skipped until the three repository variables exist (EXERCISE.md part D).
+`deploy.yml` is skipped until the three repository variables exist (EXERCISE.md, walkthrough 1, the automate extra).
 
 ## For the lecturer
 

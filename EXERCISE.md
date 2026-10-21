@@ -1,33 +1,41 @@
 # Exercise: deploy, update and roll back lucerne-temp
 
-About 60 minutes. Parts A to C and F are the core; D and E are optional. Part G is an optional
-home exercise of about 45 minutes, mostly waiting.
+Two walkthroughs on one service, the same structure as the lecture slides. **Walkthrough 1**
+(Cloud Run, about 60 minutes) is the core: steps 1 to 7, plus two optional extras.
+**Walkthrough 2** (Agent Platform, about 45 minutes, mostly waiting) is optional and costs
+node-hours while a model is deployed.
 
-| Part | What | Time |
-|---|---|---|
-| 0 | Prerequisites, a GCP project with billing | before class, 5 min |
-| A | Run it locally, with uv and with Docker | 10 min |
-| B | Deploy to Cloud Run from your laptop or Cloud Shell | 15 min |
-| C | Promote v2, deploy a candidate, split traffic, roll back | 20 min |
-| D | Optional: deploy from GitHub Actions without keys | 15 min |
-| E | Optional: batch job and UI | 5 min |
-| F | Clean up | 5 min |
-| G | Optional, at home: the same model on Agent Platform | 45 min |
+| | Step | What | Time |
+|---|---|---|---|
+| **1 · Cloud Run** | 1 | Set up: a fork, a GCP project with billing | once, 5 min |
+| | 2 | Run it locally, with uv and with Docker | 10 min |
+| | 3 | Push the image to Artifact Registry | 10 min |
+| | 4 | Deploy to Cloud Run and call it | 5 min |
+| | 5 | Promote v2, deploy a candidate, canary | 10 min |
+| | 6 | Switch, then roll back | 10 min |
+| | extra | Optional: deploy on every push, without keys | 15 min |
+| | extra | Optional: batch job and UI | 5 min |
+| | 7 | Clean up | 5 min |
+| **2 · Agent Platform** | 1–6 | Optional: register, endpoint, deploy, predict, canary, roll back and clean up | 45 min |
 
-> **Status of this document.** Part A and the local commands of part E were executed while
-> building this repo. Parts B and C were executed on 17.09.2026 against Cloud Run in
-> `europe-west6`, and the notes in those parts describe what was seen. Part G was executed on
-> 21.10.2026 against Agent Platform in `europe-west6`, with the timings it quotes. Parts D and F, and
-> writing predictions to `gs://` (part E), were checked against the current gcloud and GitHub
-> Actions documentation but **not executed**. If a command fails for you, read the error,
-> check `gcloud <command> --help`, and tell us.
+Doing walkthrough 2? Do it before Cloud Run step 7: it uses the images from steps 3 and 5.
 
-Part 0 uses the gcloud commands of last semester's setup notebook; the budget command in
-step 0.4 was checked against the documentation but not executed.
+> **Status of this document.** Step 2 and the local commands of the batch extra were executed
+> while building this repo. Steps 3 to 6 were executed on 17.09.2026 against Cloud Run in
+> `europe-west6`, and the notes there describe what was seen. Walkthrough 2 was executed on
+> 21.10.2026 against Agent Platform in `europe-west6`, with the timings it quotes. The automate
+> extra, step 7, and writing predictions to `gs://` were checked against the current gcloud and
+> GitHub Actions documentation but **not executed**. If a command fails for you, read the
+> error, check `gcloud <command> --help`, and tell us.
+
+Step 1 uses the gcloud commands of last semester's setup notebook; the budget command was
+checked against the documentation but not executed.
 
 All commands assume a bash or zsh shell in the repository root. On Windows use WSL or Cloud Shell.
 
-## 0 · Prerequisites and a GCP project
+## Walkthrough 1 · Cloud Run
+
+### 1 · Set up, once
 
 Tools:
 
@@ -65,7 +73,7 @@ gcloud config set project $PROJECT_ID
 ```
 
 3. Link the billing account that came with your coupon. Without it, enabling any API in
-   part B fails.
+   step 3 fails.
 
 ```bash
 gcloud billing accounts list                     # copy the ACCOUNT_ID
@@ -85,9 +93,9 @@ gcloud billing budgets create --billing-account <ACCOUNT_ID> \
   --threshold-rule percent=0.5 --threshold-rule percent=0.9
 ```
 
-   A budget only sends alerts; it does not stop spending. Part F still matters.
+   A budget only sends alerts; it does not stop spending. Step 7 still matters.
 
-## A · Run it locally
+### 2 · Run it locally
 
 1. Install and test. Everything runs offline, from the committed snapshot.
 
@@ -138,7 +146,7 @@ curl -s localhost:8080/health | jq
 
    Port 8080 taken? Use `-p 8081:8080` and call `localhost:8081`.
 
-## B · Deploy to Cloud Run
+### 3 · Push the image
 
 1. Set the project and the region, enable the two APIs. Use **your own** project ID: every
    command below reads `$PROJECT_ID` and `$REGION` (`europe-west6`, Zurich), and no project is
@@ -151,7 +159,7 @@ gcloud config set project $PROJECT_ID
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com
 ```
 
-   Planning to do part G? It needs one more API: `gcloud services enable aiplatform.googleapis.com`.
+   Planning to do walkthrough 2? It needs one more API: `gcloud services enable aiplatform.googleapis.com`.
 
 2. Create a Docker repository in Artifact Registry and let Docker push to it.
 
@@ -173,13 +181,15 @@ docker push $IMAGE:v1
    No Docker? Let Cloud Build do both steps:
    `gcloud services enable cloudbuild.googleapis.com && gcloud builds submit --tag $IMAGE:v1`
 
-4. Deploy. `--allow-unauthenticated` makes the URL public, which is what "live" means for MS4.
+### 4 · Deploy and call it
+
+1. Deploy. `--allow-unauthenticated` makes the URL public, which is what "live" means for MS4.
 
 ```bash
 gcloud run deploy lucerne-temp --image $IMAGE:v1 --region $REGION --allow-unauthenticated
 ```
 
-5. Read the model version from the running service.
+2. Read the model version from the running service.
 
 ```bash
 export URL=$(gcloud run services describe lucerne-temp --region $REGION --format 'value(status.url)')
@@ -191,7 +201,7 @@ curl -s -X POST $URL/predict -H 'Content-Type: application/json' -d '{"hours_ahe
    (`https://lucerne-temp-<project-number>.$REGION.run.app`): a service has both addresses and
    both work. This exercise uses the one from `services describe` throughout.
 
-6. Find your prediction in the logs: Console → Cloud Run → lucerne-temp → Logs, or the command
+3. Find your prediction in the logs: Console → Cloud Run → lucerne-temp → Logs, or the command
    below. Cloud Run parsed the JSON line from stdout, so the fields arrive as `jsonPayload`
    and you can filter on them. (`gcloud run services logs read` does not show these lines.)
 
@@ -200,7 +210,7 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
   --limit 5 --freshness 1h --format 'value(jsonPayload)'
 ```
 
-## C · Promote v2, canary, roll back
+### 5 · Promote v2, a canary on the same URL
 
 1. Run the promotion gate. It scores v2 and v1 on the same last 7 days and moves the alias
    only if v2 is better. Look at what changed.
@@ -211,7 +221,7 @@ git diff registry/registry.json
 uv run python scripts/champion_version.py      # 2
 ```
 
-2. Commit the promotion on a branch (in part D a push to main deploys by itself).
+2. Commit the promotion on a branch (in the automate extra, a push to main deploys by itself).
 
 ```bash
 git switch -c promote-v2
@@ -227,7 +237,7 @@ gcloud run deploy lucerne-temp --image $IMAGE:v2 --region $REGION --no-traffic -
 ```
 
 4. Smoke test the candidate on its own URL. Users still get v1. The tag URL is the service URL
-   from `services describe` (part B5) with `candidate---` in front. The deploy output in step 3
+   from `services describe` (step 4) with `candidate---` in front. The deploy output in step 3
    prints it too: "The revision can be reached directly at https://candidate---…".
 
 ```bash
@@ -249,7 +259,9 @@ answers from v2 is fine too. Counting right
 after the traffic update can show 40 × `1` even at 10 %: the new split takes a few seconds to
 reach every front end. Wait and count again.
 
-6. All good: everything to the newest revision.
+### 6 · Switch, then roll back
+
+1. All good: everything to the newest revision.
 
 ```bash
 gcloud run services update-traffic lucerne-temp --region $REGION --to-latest
@@ -259,7 +271,7 @@ curl -s $URL/health | jq .model_version                # "2"
    The output shows `candidate (Deleting)` next to the tag URL. Ignore it: the tag is still
    there afterwards, as `gcloud run services describe lucerne-temp --region $REGION` shows.
 
-7. Roll back. List the revisions, then send all traffic to the previous one. No rebuild.
+2. Roll back. List the revisions, then send all traffic to the previous one. No rebuild.
 
 ```bash
 gcloud run revisions list --service lucerne-temp --region $REGION
@@ -271,16 +283,16 @@ curl -s $URL/health | jq .model_version                # "1"
    Traffic is now pinned to that revision: a later `gcloud run deploy` will not receive traffic
    until you run `update-traffic --to-latest` again.
 
-8. Think: step 7 rolled back the *service*. The alias `champion` still says 2. When is that
+3. Think: the rollback above moved the *service*. The alias `champion` still says 2. When is that
    the right rollback, and when would you run `uv run python scripts/promote.py 1 --force`,
    commit and redeploy instead?
 
-## D · Optional: deploy from GitHub Actions, without keys
+### Extra · Optional: deploy on every push, without keys
 
-`.github/workflows/deploy.yml` does parts B and C on every push to main: tests, build, push,
+`.github/workflows/deploy.yml` does steps 3 to 6 on every push to main: tests, build, push,
 deploy with no traffic, smoke test, shift traffic. It authenticates with Workload Identity
 Federation: GitHub proves which repository the job runs for, Google hands out a short-lived
-token. No key file exists. The service from part B must exist already, because gcloud
+token. No key file exists. The service from step 4 must exist already, because gcloud
 rejects `--no-traffic` when it would create a new service.
 
 1. Create the deploy service account and give it what it needs: deploy to Cloud Run, push
@@ -332,7 +344,7 @@ gh variable set WIF_PROVIDER   --repo $REPO --body \
 ```
 
 4. In your fork, enable workflows in the Actions tab (forks start with Actions disabled).
-   Then merge and push the promotion from part C. IAM changes can take a few minutes to arrive.
+   Then merge and push the promotion from step 5. IAM changes can take a few minutes to arrive.
 
 ```bash
 git switch main && git merge promote-v2 && git push
@@ -343,7 +355,7 @@ gh run watch --repo $REPO
    `scripts/champion_version.py`. Make it fail once on purpose: what would you change, and
    which revision keeps serving while the job is red?
 
-## E · Optional: batch job and UI
+### Extra · Optional: batch job and UI
 
 ```bash
 uv run python -m lucerne_temp.inference.batch
@@ -352,14 +364,14 @@ API_URL=$URL uv run --group ui streamlit run ui/app.py
 ```
 
 The page reads `predictions/latest.csv` for the chart and calls `$URL/predict` for the button.
-Both show the model version. After part C they can disagree (file from v2, service rolled back
+Both show the model version. After step 6 they can disagree (file from v2, service rolled back
 to v1): that is the "both paths must report the same version" check from the lecture.
 `.github/workflows/predict.yml` runs the same batch job every hour on GitHub's runner.
 
-## F · Clean up
+### 7 · Clean up
 
-Did part G? Run its last step first: an Agent Platform endpoint bills every hour it exists
-with a model deployed.
+Doing walkthrough 2? Do it **before** this step (it uses the images from steps 3 and 5), and
+run its step 6 first: an Agent Platform endpoint bills every hour it exists with a model deployed.
 
 Cloud Run scales to zero and bills per request, so an idle service costs close to nothing;
 stored images are billed per GB and month beyond a small free allowance. The exercise should
@@ -370,7 +382,7 @@ gcloud run services delete lucerne-temp --region $REGION --quiet
 gcloud artifacts repositories delete ml --location $REGION --quiet     # deletes all images in it
 ```
 
-If you did part D:
+If you did the automate extra:
 
 ```bash
 gcloud iam workload-identity-pools delete github --location global --quiet
@@ -386,22 +398,22 @@ Check that nothing is left:
 ```bash
 gcloud run services list
 gcloud artifacts repositories list
-gcloud ai endpoints list --region $REGION      # part G: no lucerne-temp-ep
-gcloud ai models list --region $REGION         # part G: Listed 0 items.
+gcloud ai endpoints list --region $REGION      # walkthrough 2: no lucerne-temp-ep
+gcloud ai models list --region $REGION         # walkthrough 2: Listed 0 items.
 ```
 
 Prices: [Cloud Run](https://cloud.google.com/run/pricing) ·
 [Artifact Registry](https://cloud.google.com/artifact-registry/pricing)
 
-## G · Optional: the same model on Agent Platform
+## Walkthrough 2 · Optional: the same model on Agent Platform
 
 Cloud Run runs any container. Agent Platform (that is what the Google Cloud console calls it;
 formerly **Vertex AI**, and the API `aiplatform.googleapis.com`, the `gcloud ai` commands and
 the Python SDK still use the old names) is a managed model-serving platform: you register the
 container as a *model* with *versions*, deploy versions to an *endpoint*, and split traffic
-between deployed models. Same ideas as part C, different nouns.
+between deployed models. Same ideas as Cloud Run steps 5 and 6, different nouns.
 
-| Cloud Run (part C) | Agent Platform (part G) |
+| Cloud Run (walkthrough 1, steps 5–6) | Agent Platform (walkthrough 2) |
 |---|---|
 | image `:v1`, `:v2` | model `lucerne-temp`, versions 1 and 2 |
 | service URL | endpoint `lucerne-temp-ep` |
@@ -419,13 +431,15 @@ The health route must answer 200, and the container listens on port 8080 like on
 > model keeps at least one `n1-standard-2` node running (`--min-replica-count 1`) and bills
 > node-hours **even when nobody calls it**: in the order of USD 0.10 to 0.20 per node-hour
 > (check the pricing page for your region), twice that while two versions are deployed. A
-> forgotten endpoint costs a few dollars a day. Do the whole part in one sitting and run
-> step 9 at the end. Our test run (about 25 minutes of endpoint time) cost well under a dollar. [Pricing](https://cloud.google.com/vertex-ai/pricing#prediction-prices)
+> forgotten endpoint costs a few dollars a day. Do the whole walkthrough in one sitting and run
+> step 6 at the end. Our test run (about 25 minutes of endpoint time) cost well under a dollar. [Pricing](https://cloud.google.com/vertex-ai/pricing#prediction-prices)
 
-You need the images `$IMAGE:v1` and `$IMAGE:v2` from parts B and C. If you already ran part F,
-recreate the repository and push both again (B2, B3, C3).
+You need the images `$IMAGE:v1` and `$IMAGE:v2` from Cloud Run steps 3 and 5. If you already ran
+Cloud Run step 7, recreate the repository and push both images again (step 3, and the build in step 5).
 
-1. Enable the API. Keep `$PROJECT_ID`, `$REGION` and `$IMAGE` from part B.
+### 1 · Register the model
+
+1. Enable the API. Keep `$PROJECT_ID`, `$REGION` and `$IMAGE` from Cloud Run step 3.
 
 ```bash
 gcloud services enable aiplatform.googleapis.com
@@ -445,7 +459,9 @@ echo $MODEL_ID                                  # one long number
 
    Two numbers? You uploaded twice. Delete the extra one (`gcloud ai models delete <id> --region $REGION`).
 
-3. Create an endpoint. It is only an address and costs nothing until a model is deployed.
+### 2 · Create the endpoint
+
+1. Create an endpoint. It is only an address and costs nothing until a model is deployed.
 
 ```bash
 gcloud ai endpoints create --region $REGION --display-name lucerne-temp-ep
@@ -453,7 +469,9 @@ export ENDPOINT_ID=$(gcloud ai endpoints list --region $REGION \
   --filter display_name=lucerne-temp-ep --format 'value(name)')
 ```
 
-4. Deploy v1 to the endpoint with all traffic. **This took 15 minutes** in our test: Agent
+### 3 · Deploy v1
+
+1. Deploy v1 to the endpoint with all traffic. **This took 15 minutes** in our test: Agent
    Platform starts a VM, pulls the image and waits for `/health`. Billing starts now.
 
 ```bash
@@ -466,7 +484,9 @@ gcloud ai endpoints deploy-model $ENDPOINT_ID --region $REGION --model $MODEL_ID
    That ID is not the model ID: it names this *deployment* of v1 on this endpoint, like a
    revision name. `0` in `--traffic-split` means "the model being deployed right now".
 
-5. Predict. The request body is the Agent Platform format, not the one of `/predict`.
+### 4 · Predict
+
+1. Predict. The request body is the Agent Platform format, not the one of `/predict`.
 
 ```bash
 echo '{"instances": [{"hours_ahead": 6}]}' > instances.json
@@ -493,7 +513,9 @@ gcloud ai endpoints predict $ENDPOINT_ID --region $REGION \
    JSON, which `jq` cannot read. Two version fields now: `modelVersionId` is the platform's
    registry, `model_version` is ours. They agree only because we uploaded v1 as version 1.
 
-6. Upload v2 as **version 2 of the same model**, then deploy it next to v1 with 10 % of the
+### 5 · A canary with v2
+
+1. Upload v2 as **version 2 of the same model**, then deploy it next to v1 with 10 % of the
    traffic. `--parent-model` needs the full resource name; the bare ID fails with
    "Location ID is not provided". The new version is `$MODEL_ID@2`. This deploy took about
    7 minutes; v1 keeps serving all traffic until it is done.
@@ -512,7 +534,7 @@ gcloud ai endpoints deploy-model $ENDPOINT_ID --region $REGION --model $MODEL_ID
   --min-replica-count 1 --max-replica-count 3 --traffic-split $V1_DEPLOYED_ID=90,0=10
 ```
 
-7. Count which version answers. Each call takes about a second.
+2. Count which version answers. Each call takes about a second.
 
 ```bash
 gcloud ai endpoints describe $ENDPOINT_ID --region $REGION --format 'yaml(trafficSplit)'
@@ -525,7 +547,9 @@ done | sort | uniq -c
    You should see two deployed-model IDs at 90 and 10, and about 36 × `1` and 4 × `2`. We got
    38 and 2; anything from 1 to 7 answers from v2 is normal for 40 random draws.
 
-8. Roll back: all traffic to v1, then undeploy v2 so its node stops billing. No rebuild, no
+### 6 · Roll back and clean up
+
+1. Roll back: all traffic to v1, then undeploy v2 so its node stops billing. No rebuild, no
    new upload: the version stays in the registry.
 
 ```bash
@@ -548,7 +572,7 @@ gcloud logging read "resource.type=\"aiplatform.googleapis.com/Endpoint\" AND re
   --limit 3 --freshness 1h --format 'value(jsonPayload.message)'
 ```
 
-9. Clean up, **now**. Undeploy v1, delete the endpoint and the model (all versions). Check
+2. Clean up, **now**. Undeploy v1, delete the endpoint and the model (all versions). Check
    that `lucerne-temp-ep` is gone and no model is left.
 
 ```bash
@@ -559,17 +583,19 @@ gcloud ai endpoints list --region $REGION
 gcloud ai models list --region $REGION          # Listed 0 items.
 ```
 
-   The images stay in Artifact Registry; part F deletes them.
+   The images stay in Artifact Registry; Cloud Run step 7 deletes them.
 
-10. Think: Cloud Run or Agent Platform for your MS4 service? Compare what you just did with
-    part C: time to deploy, cost when idle, the request format, what the platform knows about
+### Think
+
+Think: Cloud Run or Agent Platform for your MS4 service? Compare what you just did with
+    Cloud Run steps 5 and 6: time to deploy, cost when idle, the request format, what the platform knows about
     your model. There is no right answer; write your choice and the reason in your README.
 
 ### Optional: batch prediction
 
 The same model can score a file without an endpoint: Agent Platform starts nodes, sends the
 file through `/v1/predict` in chunks, writes the results to Cloud Storage and stops. In our
-test, 5 rows took 11 minutes, almost all of it start-up. Run it before step 9 (it needs the
+test, 5 rows took 11 minutes, almost all of it start-up. Run it before step 6 (it needs the
 model), from Python, with your user credentials:
 
 ```bash

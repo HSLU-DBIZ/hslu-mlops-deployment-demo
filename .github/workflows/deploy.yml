@@ -6,8 +6,8 @@ name: deploy
 #   GCP_PROJECT_ID  your project ID
 #   WIF_PROVIDER    projects/<number>/locations/global/workloadIdentityPools/github/providers/<name>
 #   DEPLOY_SA       deployer@<project>.iam.gserviceaccount.com
-# One-time setup of all three: EXERCISE.md part D.
-# The Cloud Run service must exist already (EXERCISE.md part B): gcloud rejects
+# One-time setup of all three: EXERCISE.md, walkthrough 1, the automate extra.
+# The Cloud Run service must exist already (EXERCISE.md, walkthrough 1, step 4): gcloud rejects
 # --no-traffic when it would create a new service.
 
 on:

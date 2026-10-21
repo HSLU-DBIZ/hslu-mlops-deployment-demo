@@ -155,7 +155,7 @@ candidate, and the revision list as the deployment history.
 ## After
 
 The service scales to zero, so leaving it running costs nothing and students can curl it during
-the exercise. Clean-up commands are in [EXERCISE.md](EXERCISE.md) Part F.
+the exercise. Clean-up commands are in [EXERCISE.md](EXERCISE.md), walkthrough 1, step 7.
 
 If you promoted in step 3 and want the repo back to its committed state:
 
