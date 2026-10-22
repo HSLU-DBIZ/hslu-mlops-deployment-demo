@@ -11,4 +11,6 @@ docs
 .ruff_cache
 .pytest_cache
 EXERCISE.md
+EFFICIENCY.md
+data/history
 gha-creds-*.json
