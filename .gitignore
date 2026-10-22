@@ -6,6 +6,9 @@ artifacts/
 predictions/
 mlruns/
 
+# longer history for EFFICIENCY.md: fetched on first use, cached locally
+data/history/
+
 # python
 .venv/
 __pycache__/
