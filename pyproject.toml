@@ -17,6 +17,7 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
+efficiency = ["lightgbm>=4.7", "optuna>=5", "pyarrow>=25"]
 ui = ["streamlit>=1.38"]
 
 [build-system]

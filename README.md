@@ -5,6 +5,10 @@ lecture **SW06 Deployment and Serving** (MLOps, HSLU, HS26): a small, complete i
 service that you fork, deploy to Google Cloud Run, update, and roll back. The hands-on part
 is in [EXERCISE.md](EXERCISE.md).
 
+**SW09 Efficiency Techniques** uses the same repo for a local walkthrough, no cloud needed:
+[EFFICIENCY.md](EFFICIENCY.md) measures, profiles, validates, tunes and retrains the model on
+three years of history.
+
 > Course example for HSLU MLOps HS26. Not available as a student project topic.
 > Use it for ideas, not as a template: your own service should not be a copy of it.
 
@@ -237,15 +241,16 @@ one at a time, echoing each command before it executes.
 ## Repository layout
 
 ```
-├── README.md, EXERCISE.md (students), DEMO.md + demo/demo.sh (lecturer), LICENSE
+├── README.md, EXERCISE.md + EFFICIENCY.md (students), DEMO.md + demo/demo.sh (lecturer), LICENSE
 ├── docs/architecture.svg
 ├── src/lucerne_temp/
 │   ├── features/     ingest.py (live call, snapshot, fallback) · build.py (build_features) · backfill.py
-│   ├── training/     train.py (split, baseline, metrics) · promote.py (gate)
+│   │                 · history.py (3 years for EFFICIENCY.md, cached in data/history/, git-ignored)
+│   ├── training/     train.py (split, baseline, metrics) · promote.py (gate) · folds.py (time folds)
 │   ├── inference/    api.py · schemas.py · model.py (load_champion) · batch.py
 │   └── common/       config.py · registry.py (ModelStore, FileModelStore) · model.py (Forecaster)
 ├── ui/app.py         Streamlit
-├── scripts/          promote.py · champion_version.py
+├── scripts/          promote.py · champion_version.py · efficiency/ (one script per EFFICIENCY.md step)
 ├── data/             temperature_snapshot.csv (the only data in git: small, fixed, needed offline)
 ├── registry/         registry.json (metadata, no binaries)
 ├── tests/
